@@ -1,52 +1,71 @@
-import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { SignupDto, LoginDto } from './dto';
-import { User } from './interfaces/user.interface';
-
-
+import { PrismaService } from '../prisma/prisma.service';
+import { User } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
-  private users: User[] = [];
+  constructor(
+    private prisma: PrismaService,
+    private jwt: JwtService,
+  ) {}
 
-  constructor(private jwt: JwtService) {}
-
+  // ------------------ SIGNUP ------------------
   async signup(dto: SignupDto) {
-    const userExists = this.users.find((u) => u.email === dto.email);
-    if (userExists) throw new BadRequestException('Email already registered');
+    // Check if user already exists
+    const existingUser: User | null = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+    if (existingUser) {
+      throw new BadRequestException('Email already registered');
+    }
 
-    const hashed = await bcrypt.hash(dto.password, 10);
+    // Hash password
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-    const newUser: User = {
-      id: Date.now(),
-      fullName: dto.fullName,
-      email: dto.email,
-      password: hashed,
-    };
+    // Create user in DB
+    const newUser: User = await this.prisma.user.create({
+      data: {
+        fullName: dto.fullName, // TypeScript knows this is string
+        email: dto.email,
+        password: hashedPassword,
+      },
+    });
 
-    this.users.push(newUser);
-
-    return { message: 'User created successfully' };
+    // Return success message + userId
+    return { message: 'User created successfully', userId: newUser.id };
   }
 
+  // ------------------ LOGIN ------------------
   async login(dto: LoginDto) {
-    const user = this.users.find((u) => u.email === dto.email);
+    // Find user in DB
+    const user: User | null = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const valid = await bcrypt.compare(dto.password, user.password);
-    if (!valid) throw new UnauthorizedException('Invalid credentials');
+    // Compare password
+    const isValid = await bcrypt.compare(dto.password, user.password);
+    if (!isValid) throw new UnauthorizedException('Invalid credentials');
 
+    // Generate JWT (omit fullName for privacy)
     const token = await this.jwt.signAsync({
       sub: user.id,
       email: user.email,
-      fullName: user.fullName,
     });
 
+    // Return token + user info (including fullName for frontend)
     return {
       access_token: token,
       user: {
         id: user.id,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         fullName: user.fullName,
         email: user.email,
       },

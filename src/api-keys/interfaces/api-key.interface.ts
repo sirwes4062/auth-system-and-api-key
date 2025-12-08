@@ -1,7 +1,9 @@
 export interface ApiKey {
-  id: number;
+  id: string;
   key: string;
+  userId: string;
   serviceName: string;
-  expiresAt: Date;
   revoked: boolean;
+  expiresAt: Date;
+  createdAt: Date;
 }

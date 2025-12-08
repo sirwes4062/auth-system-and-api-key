@@ -6,8 +6,11 @@ export class ApiKeysController {
   constructor(private readonly apiService: ApiKeysService) {}
 
   @Post('create')
-  create(@Body('serviceName') serviceName: string) {
-    return this.apiService.createKey(serviceName);
+  create(
+    @Body('userId') userId: string,
+    @Body('serviceName') serviceName: string,
+  ) {
+    return this.apiService.createKey(userId, serviceName);
   }
 
   @Post('revoke')
